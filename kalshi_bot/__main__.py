@@ -14,9 +14,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kalshi_bot", description="Kalshi trading bot")
     parser.add_argument(
         "command",
-        choices=["scan", "run", "once"],
-        help="scan: list current signals; once: single trade cycle; run: continuous loop",
+        choices=["scan", "run", "once", "dashboard"],
+        help="scan: list current signals; once: single trade cycle; run: continuous loop; "
+        "dashboard: web UI",
     )
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -28,6 +31,12 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+
+    if args.command == "dashboard":
+        from .dashboard import serve
+
+        serve(host=args.host, port=args.port)
+        return 0
 
     engine = TradingEngine(config)
     if args.command == "scan":
