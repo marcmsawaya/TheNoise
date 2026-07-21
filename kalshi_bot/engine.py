@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime
 
 from .client import KalshiClient
 from .config import BotConfig
@@ -18,17 +19,43 @@ from .strategies import ALL_STRATEGIES, Strategy
 log = logging.getLogger("kalshi_bot")
 
 
+def _price_cents(m: dict, field: str) -> int:
+    """Read a price field, supporting both cent ints and `*_dollars` strings."""
+    if m.get(field) is not None:
+        return int(m[field])
+    dollars = m.get(f"{field}_dollars")
+    return int(round(float(dollars) * 100)) if dollars is not None else 0
+
+
+def _quantity(m: dict, field: str) -> int:
+    """Read a quantity field, supporting both ints and `*_fp` decimal strings."""
+    if m.get(field) is not None:
+        return int(m[field])
+    fp = m.get(f"{field}_fp")
+    return int(float(fp)) if fp is not None else 0
+
+
+def _close_ts(m: dict) -> int:
+    if m.get("close_ts"):
+        return int(m["close_ts"])
+    close_time = m.get("close_time")
+    if close_time:
+        dt = datetime.fromisoformat(close_time.replace("Z", "+00:00"))
+        return int(dt.timestamp())
+    return 0
+
+
 def snapshot_from_api(m: dict) -> MarketSnapshot:
     return MarketSnapshot(
         ticker=m.get("ticker", ""),
         title=m.get("title", ""),
-        yes_bid=int(m.get("yes_bid") or 0),
-        yes_ask=int(m.get("yes_ask") or 0),
-        no_bid=int(m.get("no_bid") or 0),
-        no_ask=int(m.get("no_ask") or 0),
-        volume=int(m.get("volume") or 0),
-        open_interest=int(m.get("open_interest") or 0),
-        close_ts=int(m.get("close_ts") or 0),
+        yes_bid=_price_cents(m, "yes_bid"),
+        yes_ask=_price_cents(m, "yes_ask"),
+        no_bid=_price_cents(m, "no_bid"),
+        no_ask=_price_cents(m, "no_ask"),
+        volume=_quantity(m, "volume"),
+        open_interest=_quantity(m, "open_interest"),
+        close_ts=_close_ts(m),
     )
 
 
@@ -50,10 +77,19 @@ class TradingEngine:
 
     # ---- scanning ----
 
+    def fetch_markets(self) -> list[dict]:
+        markets: list[dict] = []
+        for series in self.config.scan_series or [""]:
+            params = {"series_ticker": series} if series else {}
+            try:
+                markets.extend(self.client.get_markets(**params))
+            except Exception:
+                log.exception("failed to fetch series %s", series or "<all>")
+        return markets
+
     def scan(self) -> list[TradeSignal]:
-        markets = self.client.get_markets()
         signals: list[TradeSignal] = []
-        for raw in markets:
+        for raw in self.fetch_markets():
             snap = snapshot_from_api(raw)
             for strategy in self.strategies:
                 signal = strategy.evaluate(snap)

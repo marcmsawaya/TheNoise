@@ -47,6 +47,16 @@ class BotConfig:
         default_factory=lambda: _env_int("PAPER_BANKROLL_CENTS", 100_000)
     )
     poll_seconds: float = field(default_factory=lambda: _env_float("POLL_SECONDS", 30.0))
+    scan_series: list[str] = field(
+        default_factory=lambda: [
+            s.strip()
+            for s in os.environ.get(
+                "SCAN_SERIES",
+                "KXBTCD,KXETHD,KXHIGHNY,KXHIGHCHI,KXMLBGAME,KXNBA,KXNFLGAME",
+            ).split(",")
+            if s.strip()
+        ]
+    )
     risk: RiskLimits = field(default_factory=RiskLimits)
 
     @property
