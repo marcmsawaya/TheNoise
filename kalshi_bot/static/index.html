@@ -36,6 +36,12 @@
   tr:last-child td { border-bottom:0; }
   .empty { color:var(--dim); padding:16px; font-size:14px; }
   .reason { color:var(--dim); font-size:12px; }
+  .verdict { padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; text-transform:uppercase; }
+  .verdict.strong_buy { background:#3fb95033; color:var(--green); }
+  .verdict.buy { background:#1f6feb33; color:var(--accent); }
+  .verdict.skip { background:#8b949e33; color:var(--dim); }
+  .score { font-weight:700; }
+  .ai-tag { font-size:11px; color:var(--dim); font-weight:400; text-transform:none; letter-spacing:0; margin-left:8px; }
   footer { text-align:center; color:var(--dim); font-size:12px; padding:12px; }
 </style>
 </head>
@@ -54,7 +60,12 @@
     <div class="stat"><div class="label">Realized P&amp;L today</div><div class="value" id="pnl">–</div></div>
     <div class="stat"><div class="label">Trades executed</div><div class="value" id="trades-count">–</div></div>
     <div class="stat"><div class="label">Last scan</div><div class="value" id="last-scan">–</div></div>
+    <div class="stat"><div class="label">Win rate</div><div class="value" id="win-rate">–</div></div>
   </div>
+  <section>
+    <h2>Best trades <span class="ai-tag" id="ai-tag">ranked by quant model</span></h2>
+    <div id="best"><div class="empty">Loading…</div></div>
+  </section>
   <section>
     <h2>Live signals</h2>
     <div id="signals"><div class="empty">Loading…</div></div>
@@ -110,6 +121,23 @@ function render(el, tbl, emptyMsg) {
   if (tbl) el.appendChild(tbl); else el.innerHTML = `<div class="empty">${emptyMsg}</div>`;
 }
 
+async function refreshBest() {
+  const d = await (await fetch("/api/best_trades")).json();
+  $("ai-tag").textContent = d.ai_enabled ? "ranked by LLM" : "ranked by quant model (set LLM_API_KEY for AI analysis)";
+  render($("best"), table(
+    ["Rank","Ticker","Side","Price","Score","Verdict","Why it's a top trade"],
+    d.best_trades.map((t, i) => ["#" + (i + 1), t.ticker, t.side.toUpperCase(), t.price_cents + "c",
+      `<span class="score">${t.score}</span>`,
+      `<span class="verdict ${t.verdict}">${t.verdict.replace("_", " ")}</span>`,
+      `<span class="reason">${t.rationale}</span>`])
+  ), "No qualifying trades right now.");
+}
+
+async function refreshPerformance() {
+  const s = await (await fetch("/api/performance")).json();
+  $("win-rate").textContent = s.win_rate === null ? "n/a" : (s.win_rate * 100).toFixed(0) + "%";
+}
+
 async function refreshSignals() {
   const d = await (await fetch("/api/signals")).json();
   render($("signals"), table(
@@ -148,7 +176,7 @@ $("toggle").onclick = async () => {
 async function refreshAll() {
   try {
     await refreshStatus();
-    await Promise.all([refreshSignals(), refreshPositions(), refreshTrades()]);
+    await Promise.all([refreshBest(), refreshSignals(), refreshPositions(), refreshTrades(), refreshPerformance()]);
   } catch (e) { console.error(e); }
 }
 refreshAll();

@@ -54,6 +54,22 @@ python -m kalshi_bot dashboard
 - bankroll, open exposure, realized P&L, and trade count
 - open positions and full trade log
 - a Start/Stop button that runs the trading loop in the background
+- a **Best trades** panel ranking every signal with a score, verdict, and rationale
+- a win-rate card backed by persistent trade history (`trade_history.json`)
+
+## AI advisor
+
+The Best-trades panel is ranked by a built-in quant model out of the box. Set
+`LLM_API_KEY` (plus optional `LLM_API_BASE` / `LLM_MODEL` for any
+OpenAI-compatible provider) in `.env` and the ranking is done by an LLM that
+scores each candidate trade 0–100 with a short rationale. If the LLM call
+fails, it falls back to the quant ranking automatically.
+
+## Performance tracking
+
+Every executed trade is persisted to `trade_history.json` (configurable via
+`TRADE_HISTORY_PATH`), so win rate and realized P&L survive restarts. Settle a
+position programmatically with `TradingEngine.settle(ticker, won=True)`.
 
 ## Going live (real money — be careful)
 

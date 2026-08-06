@@ -15,6 +15,7 @@ from .config import BotConfig
 from .models import MarketSnapshot, TradeSignal
 from .risk import RiskManager
 from .strategies import ALL_STRATEGIES, Strategy
+from .tracker import PerformanceTracker
 
 log = logging.getLogger("kalshi_bot")
 
@@ -67,6 +68,7 @@ class TradingEngine:
         self.strategies: list[Strategy] = [cls() for cls in ALL_STRATEGIES]
         self.paper_cash_cents = config.paper_bankroll_cents
         self.trade_log: list[dict] = []
+        self.tracker = PerformanceTracker()
 
     # ---- bankroll ----
 
@@ -130,19 +132,28 @@ class TradingEngine:
             )
 
         self.risk.record_fill(signal.ticker, signal.side, decision.contracts, signal.price_cents)
-        self.trade_log.append(
-            {
-                "ts": time.time(),
-                "ticker": signal.ticker,
-                "side": signal.side,
-                "contracts": decision.contracts,
-                "price_cents": signal.price_cents,
-                "strategy": signal.strategy,
-                "edge": signal.edge,
-                "paper": self.config.paper_trading,
-            }
-        )
+        trade = {
+            "ts": time.time(),
+            "ticker": signal.ticker,
+            "side": signal.side,
+            "contracts": decision.contracts,
+            "price_cents": signal.price_cents,
+            "strategy": signal.strategy,
+            "edge": signal.edge,
+            "paper": self.config.paper_trading,
+        }
+        self.trade_log.append(trade)
+        self.tracker.record_trade(trade)
         return True
+
+    def settle(self, ticker: str, won: bool) -> int:
+        """Settle a position: update risk PnL, bankroll, and history."""
+        pos = self.risk.positions.get(ticker)
+        pnl = self.risk.record_settlement(ticker, won)
+        if self.config.paper_trading and pos is not None and won:
+            self.paper_cash_cents += pos.contracts * 100
+        self.tracker.record_settlement(ticker, won)
+        return pnl
 
     def run_once(self) -> int:
         signals = self.scan()

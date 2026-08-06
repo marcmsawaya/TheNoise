@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
+from .advisor import Advisor
 from .config import BotConfig
 from .engine import TradingEngine
 
@@ -72,9 +73,11 @@ def create_app(config: BotConfig | None = None) -> FastAPI:
     config = config or BotConfig()
     engine = TradingEngine(config)
     runner = BotRunner(engine)
+    advisor = Advisor()
     app = FastAPI(title="Kalshi Bot Dashboard")
     app.state.engine = engine
     app.state.runner = runner
+    app.state.advisor = advisor
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
@@ -116,6 +119,19 @@ def create_app(config: BotConfig | None = None) -> FastAPI:
     @app.get("/api/trades")
     def trades() -> dict:
         return {"trades": engine.trade_log}
+
+    @app.get("/api/best_trades")
+    def best_trades() -> dict:
+        ranked = advisor.rank(engine.scan())
+        runner.last_scan_ts = time.time()
+        return {
+            "ai_enabled": advisor.config.enabled,
+            "best_trades": [r.to_dict() for r in ranked],
+        }
+
+    @app.get("/api/performance")
+    def performance() -> dict:
+        return engine.tracker.stats()
 
     @app.post("/api/bot/start")
     def start_bot() -> dict:

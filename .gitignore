@@ -1,3 +1,4 @@
 kalshi_bot.egg-info/
 __pycache__/
 .env
+trade_history.json
