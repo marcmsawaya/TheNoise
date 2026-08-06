@@ -65,6 +65,30 @@ OpenAI-compatible provider) in `.env` and the ranking is done by an LLM that
 scores each candidate trade 0–100 with a short rationale. If the LLM call
 fails, it falls back to the quant ranking automatically.
 
+## Build your own trading LLM (fine-tuning)
+
+Train a custom model on real settled Kalshi markets and plug it into the bot:
+
+```bash
+pip install -e ".[finetune]"                      # torch, transformers, peft, datasets
+python -m kalshi_bot.finetune dataset              # settled markets -> finetune_data/train.jsonl
+python -m kalshi_bot.finetune train                # LoRA fine-tune (default Qwen2.5-0.5B-Instruct)
+python -m kalshi_bot.finetune serve                # OpenAI-compatible API on :8001
+```
+
+Then point the bot at your model in `.env`:
+
+```dotenv
+LLM_API_KEY=local
+LLM_API_BASE=http://127.0.0.1:8001/v1
+LLM_MODEL=kalshi-llm
+```
+
+Each settled market becomes a training example: market stats in, the
+profitable side/score/verdict/rationale out. The default base model runs on
+CPU; pass `--base-model` for a larger model on a GPU. More settled history =
+better model — rerun `dataset` periodically and retrain.
+
 ## Performance tracking
 
 Every executed trade is persisted to `trade_history.json` (configurable via
