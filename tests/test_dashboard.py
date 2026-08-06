@@ -56,6 +56,25 @@ def test_signals_endpoint_scans_markets():
     assert signals[0]["price_cents"] == 91
 
 
+def test_best_trades_endpoint():
+    client, _ = make_client()
+    d = client.get("/api/best_trades").json()
+    assert d["ai_enabled"] is False
+    assert len(d["best_trades"]) == 1
+    top = d["best_trades"][0]
+    assert top["ticker"] == "FAV-1"
+    assert top["verdict"] in ("strong_buy", "buy", "skip")
+    assert top["rationale"]
+    assert top["source"] == "quant"
+
+
+def test_performance_endpoint():
+    client, _ = make_client()
+    stats = client.get("/api/performance").json()
+    assert "win_rate" in stats
+    assert "total_trades" in stats
+
+
 def test_start_stop_bot():
     client, _ = make_client()
     assert client.post("/api/bot/start").json()["running"] is True
