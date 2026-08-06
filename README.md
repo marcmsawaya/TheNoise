@@ -41,7 +41,19 @@ python -m kalshi_bot once
 
 # Continuous paper-trading loop
 python -m kalshi_bot run
+
+# Web dashboard (open http://127.0.0.1:8000)
+python -m kalshi_bot dashboard
 ```
+
+## Dashboard
+
+`python -m kalshi_bot dashboard` starts a local web UI at http://127.0.0.1:8000 with:
+
+- live signals rescanned from the Kalshi API
+- bankroll, open exposure, realized P&L, and trade count
+- open positions and full trade log
+- a Start/Stop button that runs the trading loop in the background
 
 ## Going live (real money — be careful)
 

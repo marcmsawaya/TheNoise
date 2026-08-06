@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kalshi Bot Dashboard</title>
+<style>
+  :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#e6edf3; --dim:#8b949e;
+          --green:#3fb950; --red:#f85149; --accent:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:16px; padding:16px 24px; border-bottom:1px solid var(--border); }
+  header h1 { font-size:18px; margin:0; }
+  .badge { padding:2px 10px; border-radius:12px; font-size:12px; font-weight:600; }
+  .badge.paper { background:#1f6feb33; color:var(--accent); }
+  .badge.live { background:#f8514933; color:var(--red); }
+  .badge.running { background:#3fb95033; color:var(--green); }
+  .badge.stopped { background:#8b949e33; color:var(--dim); }
+  .spacer { flex:1; }
+  button { background:var(--accent); color:#0d1117; border:0; border-radius:6px; padding:8px 16px;
+           font-weight:600; cursor:pointer; font-size:14px; }
+  button.stop { background:var(--red); color:#fff; }
+  button:disabled { opacity:.5; cursor:default; }
+  main { padding:24px; max-width:1100px; margin:0 auto; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:24px; }
+  .stat { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:14px; }
+  .stat .label { color:var(--dim); font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
+  .stat .value { font-size:22px; font-weight:700; margin-top:4px; }
+  .pos { color:var(--green); } .neg { color:var(--red); }
+  section { background:var(--card); border:1px solid var(--border); border-radius:8px; margin-bottom:24px; overflow:hidden; }
+  section h2 { font-size:14px; margin:0; padding:12px 16px; border-bottom:1px solid var(--border); color:var(--dim);
+               text-transform:uppercase; letter-spacing:.05em; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 16px; border-bottom:1px solid var(--border); }
+  th { color:var(--dim); font-weight:500; font-size:12px; }
+  tr:last-child td { border-bottom:0; }
+  .empty { color:var(--dim); padding:16px; font-size:14px; }
+  .reason { color:var(--dim); font-size:12px; }
+  footer { text-align:center; color:var(--dim); font-size:12px; padding:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Kalshi Bot</h1>
+  <span id="mode" class="badge paper">…</span>
+  <span id="state" class="badge stopped">…</span>
+  <div class="spacer"></div>
+  <button id="toggle" disabled>…</button>
+</header>
+<main>
+  <div class="stats">
+    <div class="stat"><div class="label">Bankroll</div><div class="value" id="bankroll">–</div></div>
+    <div class="stat"><div class="label">Open exposure</div><div class="value" id="exposure">–</div></div>
+    <div class="stat"><div class="label">Realized P&amp;L today</div><div class="value" id="pnl">–</div></div>
+    <div class="stat"><div class="label">Trades executed</div><div class="value" id="trades-count">–</div></div>
+    <div class="stat"><div class="label">Last scan</div><div class="value" id="last-scan">–</div></div>
+  </div>
+  <section>
+    <h2>Live signals</h2>
+    <div id="signals"><div class="empty">Loading…</div></div>
+  </section>
+  <section>
+    <h2>Positions</h2>
+    <div id="positions"><div class="empty">No open positions</div></div>
+  </section>
+  <section>
+    <h2>Trade log</h2>
+    <div id="trades"><div class="empty">No trades yet</div></div>
+  </section>
+</main>
+<footer>Auto-refreshes every 10s · signals rescanned from the live Kalshi API</footer>
+<script>
+const $ = id => document.getElementById(id);
+const usd = c => (c < 0 ? "-$" : "$") + Math.abs(c / 100).toFixed(2);
+
+let running = false;
+
+async function refreshStatus() {
+  const s = await (await fetch("/api/status")).json();
+  running = s.running;
+  $("mode").textContent = s.mode.toUpperCase();
+  $("mode").className = "badge " + s.mode;
+  $("state").textContent = running ? "RUNNING" : "STOPPED";
+  $("state").className = "badge " + (running ? "running" : "stopped");
+  const btn = $("toggle");
+  btn.textContent = running ? "Stop bot" : "Start bot";
+  btn.className = running ? "stop" : "";
+  btn.disabled = false;
+  $("bankroll").textContent = usd(s.bankroll_cents);
+  $("exposure").textContent = usd(s.open_exposure_cents);
+  const pnl = $("pnl");
+  pnl.textContent = usd(s.realized_pnl_today_cents);
+  pnl.className = "value " + (s.realized_pnl_today_cents >= 0 ? "pos" : "neg");
+  $("trades-count").textContent = s.trades_executed;
+  $("last-scan").textContent = s.last_scan_ts ? new Date(s.last_scan_ts * 1000).toLocaleTimeString() : "never";
+}
+
+function table(headers, rows) {
+  if (!rows.length) return null;
+  const t = document.createElement("table");
+  t.innerHTML = "<thead><tr>" + headers.map(h => `<th>${h}</th>`).join("") + "</tr></thead>";
+  const tb = document.createElement("tbody");
+  for (const r of rows) tb.innerHTML += "<tr>" + r.map(c => `<td>${c}</td>`).join("") + "</tr>";
+  t.appendChild(tb);
+  return t;
+}
+
+function render(el, tbl, emptyMsg) {
+  el.innerHTML = "";
+  if (tbl) el.appendChild(tbl); else el.innerHTML = `<div class="empty">${emptyMsg}</div>`;
+}
+
+async function refreshSignals() {
+  const d = await (await fetch("/api/signals")).json();
+  render($("signals"), table(
+    ["Ticker","Side","Price","Edge","Strategy","Why"],
+    d.signals.map(s => [s.ticker, s.side.toUpperCase(), s.price_cents + "c",
+      (s.edge * 100).toFixed(1) + "%", s.strategy, `<span class="reason">${s.reason}</span>`])
+  ), "No signals right now — the market has no qualifying opportunities.");
+}
+
+async function refreshPositions() {
+  const d = await (await fetch("/api/positions")).json();
+  render($("positions"), table(
+    ["Ticker","Side","Contracts","Avg cost","Cost basis"],
+    d.positions.map(p => [p.ticker, p.side.toUpperCase(), p.contracts,
+      p.avg_cost_cents + "c", usd(p.cost_basis_cents)])
+  ), "No open positions");
+}
+
+async function refreshTrades() {
+  const d = await (await fetch("/api/trades")).json();
+  render($("trades"), table(
+    ["Time","Ticker","Side","Contracts","Price","Strategy","Mode"],
+    d.trades.slice().reverse().map(t => [new Date(t.ts * 1000).toLocaleTimeString(), t.ticker,
+      t.side.toUpperCase(), t.contracts, t.price_cents + "c", t.strategy, t.paper ? "paper" : "LIVE"])
+  ), "No trades yet");
+}
+
+$("toggle").onclick = async () => {
+  $("toggle").disabled = true;
+  await fetch(running ? "/api/bot/stop" : "/api/bot/start", { method: "POST" });
+  await refreshStatus();
+  await refreshTrades();
+  await refreshPositions();
+};
+
+async function refreshAll() {
+  try {
+    await refreshStatus();
+    await Promise.all([refreshSignals(), refreshPositions(), refreshTrades()]);
+  } catch (e) { console.error(e); }
+}
+refreshAll();
+setInterval(refreshAll, 10000);
+</script>
+</body>
+</html>
