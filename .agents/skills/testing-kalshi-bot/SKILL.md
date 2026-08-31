@@ -27,6 +27,14 @@ description: Test the kalshi_bot trading bot end-to-end against the live Kalshi 
 - Good end-to-end assertions: (1) scan exits 0 with ≥1 signal at 1–99c; (2) after `once`, `paper_cash_cents == start − Σ(contracts × price)` exactly; (3) with tight `MAX_ORDER_COST_CENTS`/`MAX_OPEN_EXPOSURE_CENTS` env vars, excess signals log `REJECTED ...` reasons.
 - Signal availability depends on market hours/liquidity; if zero signals at test time, verify parsing with a raw-fields probe before concluding the strategies are broken.
 - Avoid committing `__pycache__` (use `git add` on specific paths, not `git add -A` after running tests).
+- Shell-only CLI testing: no recording needed; collect command output as evidence.
+
+## Dashboard / UI testing
+- Start with `rm -f trade_history.json && python -m kalshi_bot dashboard` (background) and open http://127.0.0.1:8000 in Chrome; record the browser session.
+- Good UI assertions: Best-trades panel sorted by descending score with verdict badges and non-empty rationales; Start bot → trades appear and bankroll + open exposure = starting bankroll cent-exact; Stop bot retains trade count/positions.
+- Persistence check: after trades, `trade_history.json` should contain one record per trade (`status: open`) matching the UI trade log, and `GET /api/performance` counts should match (`win_rate` null until settlements).
+- The AI ranking uses a quant fallback when `LLM_API_KEY` is unset (header says "ranked by quant model"). The real LLM path might only be testable with a key; unit tests mock it (`tests/test_advisor.py`). Delete stale `trade_history.json` before testing or counts will be off.
+>>>>>>> Stashed changes
 
 ## Devin Secrets Needed
 - None for paper mode. For live mode: `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY_PATH` (RSA private key file).
